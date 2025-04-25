@@ -1,5 +1,6 @@
 #!/bin/bash
 set -e
+export AWS_REGION=ap-south-1
 
 APP_DIR="/var/www/edunexus"
 
