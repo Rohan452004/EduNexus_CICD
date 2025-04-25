@@ -1,0 +1,18 @@
+version: 0.0
+os: linux
+files:
+  - source: / # Copy all build artifacts from S3 root
+    destination: /var/www/edunexus # Destination on the EC2 instance
+hooks:
+  BeforeInstall:
+    - location: scripts/before_install.sh
+      timeout: 300
+      runas: root 
+  ApplicationStop:
+    - location: scripts/app_stop.sh
+      timeout: 60
+      runas: root
+  ApplicationStart:
+    - location: scripts/app_start.sh
+      timeout: 120
+      runas: root
