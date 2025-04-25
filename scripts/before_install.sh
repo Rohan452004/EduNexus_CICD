@@ -6,11 +6,15 @@ echo "Installing Node.js..."
 # Update package lists
 yum update -y
 
-# Install the Node.js 16.x repository
-curl -sL https://rpm.nodesource.com/setup_16.x | bash -
-
-# Install Node.js and npm
-yum install -y nodejs
+# Install Node.js 16.x if not already installed
+if ! command -v node &> /dev/null
+then
+    echo "Node.js could not be found, installing..."
+    curl -sL https://rpm.nodesource.com/setup_16.x | bash -
+    yum install -y nodejs
+else
+    echo "Node.js is already installed, skipping installation."
+fi
 
 # Create application directory if it doesn't exist
 mkdir -p /var/www/edunexus
@@ -25,5 +29,8 @@ echo "npm version:"
 npm -v
 echo "PM2 version:"
 pm2 -v
+
+# Cleanup package manager cache (optional)
+yum clean all
 
 echo "Node.js installation completed"
