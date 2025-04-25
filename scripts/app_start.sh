@@ -63,7 +63,7 @@ if ! command -v node &> /dev/null; then
     exit 1
 fi
 
-pm2 start "$APP_DIR/server.js" --name "edunexus" --env production
+pm2 start "$APP_DIR/index.js" --name "edunexus" --env production
 
 pm2 startup | bash || echo "PM2 startup script failed"
 pm2 save || echo "PM2 save failed"
