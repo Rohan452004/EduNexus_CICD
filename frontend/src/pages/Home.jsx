@@ -38,8 +38,8 @@ const Home = () => {
 
         {/* Heading */}
         <div className="mt-1 text-center text-4xl font-semibold">
-          Empower Your Future with
-          <HighlightText text={"Coding Skills"} />
+          Trying out CICD Pipeline
+          <HighlightText text={"Hope it Works"} />
         </div>
 
         {/* Sub Heading */}
