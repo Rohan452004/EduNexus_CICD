@@ -10,7 +10,7 @@ phases:
       - npm install
       - cd ../frontend # Assuming your frontend is in a 'frontend' folder
       - npm install
-      - echo "REACT_APP_BASE_URL is: $REACT_APP_BASE_URL"
+      - echo "REACT_APP_BASE_URL is: ${REACT_APP_BASE_URL:-NOT_SET}"
       - echo Creating .env file for React frontend...
       - echo "REACT_APP_BASE_URL=$REACT_APP_BASE_URL" >> .env
       - echo "REACT_APP_RAZORPAY_KEY_ID=$REACT_APP_RAZORPAY_KEY_ID" >> .env
