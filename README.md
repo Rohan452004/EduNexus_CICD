@@ -1,6 +1,6 @@
 # EduNexus Ed-Tech Platform (MERN App) ( CICD PipeLine )
 
-![diagram-export-26-04-2025-15_50_46](https://github.com/user-attachments/assets/635e180f-e8bf-408f-8284-5019660bb5b3)
+![diagram-export-26-04-2025-16_16_18](https://github.com/user-attachments/assets/be0a4714-b449-4582-81e0-c80148228303)
 
 
 EduNexus is a fully functional ed-tech platform that enables users to create, consume, and rate educational content. The platform is built using the MERN stack, which includes ReactJS, NodeJS, MongoDB, and ExpressJS.
