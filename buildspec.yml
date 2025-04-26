@@ -3,12 +3,12 @@ version: 0.2
 phases:
   install:
     runtime-versions:
-      nodejs: 16 
+      nodejs: 16
     commands:
       - echo Installing dependencies...
-      - cd backend
+      - cd backend # Assuming your backend is in a 'backend' folder
       - npm install
-      - cd ../frontend
+      - cd ../frontend # Assuming your frontend is in a 'frontend' folder
       - npm install
       - echo "REACT_APP_BASE_URL is: $REACT_APP_BASE_URL"
       - echo Creating .env file for React frontend...
@@ -18,35 +18,20 @@ phases:
   build:
     commands:
       - echo Building React frontend...
-      - npm run build # Assumes 'build' script in frontend/package.json
+      - npm run build # Assumes 'build' script exists in frontend/package.json
       - echo Copying frontend build to backend public directory...
-      # Adjust paths as needed!
       - mkdir -p ../backend/public
       - cp -r build/* ../backend/public/
+
   post_build:
     commands:
       - echo Build completed on `date`
       - echo Preparing artifacts...
-      # Navigate to where the final deployable code is (backend + frontend build)
       - cd ../backend
-      # Remove development dependencies if desired (optional)
-      # - npm prune --production
-      # Copy necessary deployment files into the root of the artifact
       - cp ../appspec.yml .
       - cp -r ../scripts . # Copy the entire scripts directory
 
 artifacts:
   files:
-    # Include everything needed on the server
     - '**/*' # Include all files from the backend directory (including node_modules, public, scripts, appspec.yml)
-  # If you pruned node_modules, you might need to list files explicitly
-  # files:
-  #   - server.js
-  #   - package.json
-  #   - package-lock.json
-  #   - public/**/*
-  #   - scripts/**/*
-  #   - appspec.yml
-  #   - .env # If managing .env this way (NOT RECOMMENDED FOR SECRETS)
-  #   - any other required backend files/folders...
   base-directory: backend # The root for the artifact zip will be the backend folder
