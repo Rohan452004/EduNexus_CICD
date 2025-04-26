@@ -1,11 +1,10 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Sets up EC2 Instance, Security Group, and IAM Role for EduNexus App deployment.
+Description: Sets up EC2 Instances behind a Load Balancer, with AutoScaling, Security Group, and IAM Role for EduNexus App deployment.
 
 Parameters:
   KeyPairName:
     Description: Name of an existing EC2 KeyPair to enable SSH access
     Type: AWS::EC2::KeyPair::KeyName
-    ConstraintDescription: must be the name of an existing EC2 KeyPair.
   InstanceType:
     Description: EC2 instance type
     Type: String
@@ -13,26 +12,21 @@ Parameters:
     AllowedValues:
       - t2.micro
       - t3.micro
-      # Add others if needed
   AmiId:
-    Description: AMI ID for Amazon Linux 2 (find latest for your region)
+    Description: AMI ID for Amazon Linux 2 (or your app-specific AMI)
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
-    Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2 # Check/Update for your region
+    Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2
   SshLocation:
-    Description: The IP address range that can be used to SSH into the EC2 instances
+    Description: IP address range allowed to SSH into the EC2 instance
     Type: String
-    MinLength: '9'
-    MaxLength: '18'
     Default: 0.0.0.0/0
-    AllowedPattern: (\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})
-    ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
   AppPort:
-    Description: Port the Node.js application will listen on
+    Description: Application Port
     Type: Number
-    Default: 4000 # Match your Parameter Store value for PORT
+    Default: 4000
 
 Resources:
-  # IAM Role for EC2 Instance
+
   MernAppEC2Role:
     Type: AWS::IAM::Role
     Properties:
@@ -45,7 +39,7 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
-        - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess # Consider restricting this later
+        - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
       Policies:
         - PolicyName: SSMParameterStoreReadOnly
           PolicyDocument:
@@ -53,119 +47,158 @@ Resources:
             Statement:
               - Effect: Allow
                 Action: ssm:GetParameters
-                Resource:
+                Resource: 
                   - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/edunexus/*'
-                  # Add others if needed
 
-  # Instance Profile to attach Role to EC2
   MernAppInstanceProfile:
     Type: AWS::IAM::InstanceProfile
     Properties:
       Roles:
         - !Ref MernAppEC2Role
 
-  # Security Group
   MernAppSG:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Allow HTTP, SSH, and Custom App Port for MERN App
-      VpcId: vpc-0496fb89a2f0b5a69 # Assumes you have exported your default VPC ID, otherwise specify directly
-      # If not using DefaultVPC import, find your VPC ID and replace the line above with:
-      # VpcId: vpc-xxxxxxxxxxxxxxxxx
+      GroupDescription: Allow HTTP, SSH, App Port
+      VpcId: vpc-0496fb89a2f0b5a69
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 22
           ToPort: 22
           CidrIp: !Ref SshLocation
         - IpProtocol: tcp
-          FromPort: 80 # Standard HTTP, might not be used directly by app
+          FromPort: 80
           ToPort: 80
-          CidrIp: 0.0.0.0/0
-        - IpProtocol: tcp
-          FromPort: !Ref AppPort
-          ToPort: !Ref AppPort
           CidrIp: 0.0.0.0/0
         - IpProtocol: tcp
           FromPort: 443
           ToPort: 443
           CidrIp: 0.0.0.0/0
-
+        - IpProtocol: tcp
+          FromPort: !Ref AppPort
+          ToPort: !Ref AppPort
+          CidrIp: 0.0.0.0/0
       Tags:
         - Key: Name
           Value: MernAppSG
 
-  # EC2 Instance
-  MernAppInstance:
-    Type: AWS::EC2::Instance
+  MernAppLoadBalancerSG:
+    Type: AWS::EC2::SecurityGroup
     Properties:
-      InstanceType: !Ref InstanceType
-      KeyName: !Ref KeyPairName
-      ImageId: !Ref AmiId
-      IamInstanceProfile: !Ref MernAppInstanceProfile
-      NetworkInterfaces:
-        - AssociatePublicIpAddress: true
-          DeviceIndex: '0'
-          GroupSet:
-            - !Ref MernAppSG
-          # SubnetId: !ImportValue DefaultSubnet # Assumes export, replace with specific subnet ID if needed
-          # If not using DefaultSubnet import, find a public Subnet ID and replace the line above with:
-          SubnetId: subnet-07a617a402b774e60 # Specify a public subnet ID in your VPC
+      GroupDescription: Allow inbound traffic to Load Balancer
+      VpcId: vpc-0496fb89a2f0b5a69
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: MernAppLoadBalancerSG
+
+  MernAppLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: MernApp-ALB
+      Subnets:
+        - subnet-07a617a402b774e60 # Add more subnets if multi-AZ
+        - subnet-02081608f2125bc48
+      SecurityGroups:
+        - !Ref MernAppLoadBalancerSG
+      Scheme: internet-facing
+      Type: application
+
+  MernAppTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      VpcId: vpc-0496fb89a2f0b5a69
+      Port: !Ref AppPort
+      Protocol: HTTP
+      TargetType: instance
+      HealthCheckPath: /
+      HealthCheckPort: !Ref AppPort
+      HealthCheckProtocol: HTTP
+      Matcher:
+        HttpCode: 200
+
+  MernAppListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref MernAppTargetGroup
+      LoadBalancerArn: !Ref MernAppLoadBalancer
+      Port: 80
+      Protocol: HTTP
+
+  MernAppLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        InstanceType: !Ref InstanceType
+        KeyName: !Ref KeyPairName
+        ImageId: !Ref AmiId
+        IamInstanceProfile:
+          Name: !Ref MernAppInstanceProfile
+        SecurityGroupIds:
+          - !Ref MernAppSG
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            yum update -y
+            yum install ruby wget -y
+            cd /home/ec2-user
+            wget https://aws-codedeploy-${AWS::Region}.s3.${AWS::Region}.amazonaws.com/latest/install
+            chmod +x ./install
+            ./install auto
+            sudo -u ec2-user -i <<'EOF'
+            unset NVM_DIR
+            curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+            export NVM_DIR="/home/ec2-user/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+            nvm install 16
+            nvm use 16
+            nvm alias default 16
+            npm install pm2 -g
+            EOF
+            curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+            export NVM_DIR="/root/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+            nvm install 16
+            nvm use 16
+            nvm alias default 16
+            npm install pm2 -g
+            curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+            unzip awscliv2.zip
+            ./aws/install
+            rm -rf aws awscliv2.zip
+            service codedeploy-agent start
+            chkconfig codedeploy-agent on
+
+  MernAppAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      VPCZoneIdentifier:
+        - subnet-07a617a402b774e60
+      LaunchTemplate:
+        LaunchTemplateId: !Ref MernAppLaunchTemplate
+        Version: !GetAtt MernAppLaunchTemplate.LatestVersionNumber
+      MinSize: 1
+      MaxSize: 3
+      DesiredCapacity: 1
+      TargetGroupARNs:
+        - !Ref MernAppTargetGroup
+      HealthCheckType: EC2
+      HealthCheckGracePeriod: 300
       Tags:
         - Key: Name
           Value: MernAppServer-CFN
-        - Key: Deploy # CRITICAL TAG FOR CODEDEPLOY
+          PropagateAtLaunch: true
+        - Key: Deploy
           Value: edunexus
-      UserData:
-        Fn::Base64: !Sub |
-          #!/bin/bash
-          # Update system and install Ruby (CodeDeploy agent dependency) and wget
-          yum update -y
-          yum install ruby wget -y
-
-          # Install CodeDeploy Agent
-          cd /home/ec2-user
-          wget https://aws-codedeploy-${AWS::Region}.s3.${AWS::Region}.amazonaws.com/latest/install
-          chmod +x ./install
-          ./install auto
-
-          # Install NVM, Node.js LTS, and PM2 for ec2-user
-          sudo -u ec2-user -i <<'EOF'
-          unset NVM_DIR
-          curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
-          export NVM_DIR="/home/ec2-user/.nvm"
-          [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-          nvm install 16 # Install specific Node.js version from buildspec
-          nvm use 16
-          nvm alias default 16
-          npm install pm2 -g
-          EOF
-
-          # Install NVM, Node.js LTS, and PM2 for root user
-          curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
-          export NVM_DIR="/root/.nvm"
-          [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-          nvm install 16 # Match buildspec version
-          nvm use 16
-          nvm alias default 16
-          npm install pm2 -g
-
-          # Install AWS CLI v2
-          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-          unzip awscliv2.zip
-          ./aws/install
-          rm -rf aws awscliv2.zip
-
-          # Start CodeDeploy agent service
-          service codedeploy-agent start
-          chkconfig codedeploy-agent on
+          PropagateAtLaunch: true
 
 Outputs:
-  InstanceId:
-    Description: InstanceId of the newly created EC2 instance
-    Value: !Ref MernAppInstance
-  PublicIp:
-    Description: Public IP address of the newly created EC2 instance
-    Value: !GetAtt MernAppInstance.PublicIp
-  PublicDnsName:
-    Description: Public DNSName of the newly created EC2 instance
-    Value: !GetAtt MernAppInstance.PublicDnsName
+  LoadBalancerDNSName:
+    Description: Public DNS name of the LoadBalancer
+    Value: !GetAtt MernAppLoadBalancer.DNSName
