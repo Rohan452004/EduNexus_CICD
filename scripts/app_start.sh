@@ -1,6 +1,10 @@
 #!/bin/bash
 set -e
 
+# Set AWS region environment variables
+export AWS_REGION=ap-south-1
+export AWS_DEFAULT_REGION=ap-south-1
+
 APP_DIR="/var/www/edunexus"
 cd $APP_DIR
 
