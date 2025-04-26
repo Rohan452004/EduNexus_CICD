@@ -1,4 +1,5 @@
 const express = require("express");
+const path = require("path");
 const app = express();
 
 const userRoutes = require("./routes/User");
@@ -17,11 +18,10 @@ dotenv.config();
 const PORT = process.env.PORT || 4000;
 const frontendurl = process.env.FRONTEND_URL;
 
-console.log(frontendurl)
-
-//database connect
+// Connect to database
 database.connectDB();
-//middlewares
+
+// Middleware
 app.use(express.json());
 app.use(cookieParser());
 app.use(
@@ -37,24 +37,26 @@ app.use(
     tempFileDir: "/tmp",
   })
 );
-//cloudinary connection
+
+// Connect to Cloudinary
 cloudinaryConnect();
 
-//routes
+// API Routes
 app.use("/api/v1/auth", userRoutes);
 app.use("/api/v1/profile", profileRoutes);
 app.use("/api/v1/course", courseRoutes);
 app.use("/api/v1/payment", paymentRoutes);
 app.use("/api/v1/reach", contactUsRoute);
 
-//def route
-app.get("/", (req, res) => {
-  return res.json({
-    success: true,
-    message: "Your server is up and running....",
-  });
+// Serve frontend static files from /public
+app.use(express.static(path.join(__dirname, "public")));
+
+// Fallback route: Serve index.html for any unknown route (for React Router support)
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
+// Start server
 app.listen(PORT, () => {
-  console.log(`App is running at ${PORT}`);
+  console.log(`App is running at http://localhost:${PORT}`);
 });
