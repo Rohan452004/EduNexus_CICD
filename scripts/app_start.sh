@@ -72,7 +72,7 @@ fi
 echo "Starting application with PM2..."
 
 # Start the Node.js application using PM2
-pm2 start "$APP_DIR/server.js" --name "edunexus" --env production
+pm2 start "$APP_DIR/index.js" --name "edunexus" --env production
 
 # Enable PM2 to start on boot
 pm2 startup | bash || echo "PM2 startup script failed"
